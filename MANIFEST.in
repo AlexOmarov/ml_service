@@ -1,0 +1,5 @@
+recursive-include ml_service/app/templates *
+recursive-include ml_service/app/static *
+
+recursive-include ml_service/app/ml/templates *
+recursive-include ml_service/app/ml/static *
