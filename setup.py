@@ -25,8 +25,13 @@ setup(
     ],
     keywords='Flask Flask-Assets Machine-learning Tensorflow',
     packages=find_packages(),
-    install_requires=['Flask~=1.1.2',
-                      'Waitress~=1.4.3'],
+    install_requires=[
+        'Flask~=1.1.2',
+        'TensorFlow~=2.2.0rc4',
+        'Matplotlib~=3.2.1',
+        'Numpy~=1.18.3',
+        'Waitress~=1.4.3'
+    ],
     extras_require={
         'dev': [''],
         'test': [''],
