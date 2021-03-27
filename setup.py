@@ -27,10 +27,12 @@ setup(
     packages=find_packages(),
     install_requires=[
         'Flask~=1.1.2',
-        'TensorFlow~=2.2.0rc4',
+        'Waitress~=1.4.3',
+        'TensorFlow~=2.4.1',
         'Matplotlib~=3.2.1',
-        'Numpy~=1.18.3',
-        'Waitress~=1.4.3'
+        'Numpy~=1.19.2',
+        'markovify~=0.9.0',
+        'pyspark~=3.1.1'
     ],
     extras_require={
         'dev': [''],
