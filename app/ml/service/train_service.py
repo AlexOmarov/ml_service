@@ -15,12 +15,12 @@ class TrainService(metaclass=SingletonMeta):
     spark: SparkContext
 
     def __init__(self, sc):
-        """Init the recommendation engine given a Spark context and a dataset path
+        """Init train engine
         """
 
-        logger.info("Starting up the Train Engine: ")
+        logger.info("Starting up the Train Engine...")
         self.spark = sc
 
     def train(self):
-        self.spark.range(1000 * 1000 * 500).reduce(add)
         print("training...")
+        self.spark.range(1000 * 1000 * 500).reduce(add)
