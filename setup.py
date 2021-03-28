@@ -32,7 +32,9 @@ setup(
         'Matplotlib~=3.2.1',
         'Numpy~=1.19.2',
         'markovify~=0.9.0',
-        'pyspark~=3.1.1'
+        'pyspark~=3.1.1',
+        'scikit-learn~=0.24.1',
+        'setuptools~=54.1.1',
     ],
     extras_require={
         'dev': [''],

@@ -32,8 +32,6 @@ class Config(object):
     # signing the data.
     CSRF_SESSION_KEY = "secret"
 
-    #PYSPARK_HADOOP_VERSION = "NONE"
-
 
 class ProdConfig(Config):
     DEBUG = False
