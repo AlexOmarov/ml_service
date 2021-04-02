@@ -16,8 +16,6 @@ logger = logging.getLogger(__name__)
 def calculateSimilarity(history):
     result = []
     for service in history:
-        print(service)
-        print(history[service])
         row = {}
         x = history[service]["connected"]
         not_x = history[service]["unconnected"]
@@ -30,7 +28,7 @@ def calculateSimilarity(history):
                 distance = xy / x
             row[sim] = distance
 
-        #result.append(Similarity(service, row))
+        result.append(Similarity(service, row))
     return result
 
 
@@ -107,19 +105,22 @@ class TrainService(metaclass=SingletonMeta):
             .load().rdd.mapPartitions(matrix).collect()
 
         result: dict = {}
-        # Разщделять на количество агрегаций + посмотреть, точно ли агрегируется как нужно
+        aggregation_count = {}
+        # Разделять на количество агрегаций + посмотреть, точно ли агрегируется как нужно
         for sim in similarities:
             row: dict = sim.sims
             if sim.name in result:
                 row = {k: result[sim.name].get(k, 0) + sim.sims.get(k, 0) for k in set(result[sim.name]) | set(sim.sims)}
+                if sim.name in aggregation_count:
+                    aggregation_count[sim.name] += 1
+                else:
+                    aggregation_count[sim.name] = 1
             result[sim.name] = row
-            for el in row:
-                if row[el] > 0:
-                    print(el)
-                    print(row[el])
-        print(result)
+        for service in aggregation_count:
+            for sim in result[service]:
+                result[service][sim] = result[service][sim] / aggregation_count[service]
         df = DataFrame(result).T.fillna(0)
-        epsilon = 0.3
+        epsilon = 0.04
         min_samples = 4
 
         db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(df)
