@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.commons.singleton.singleton_meta import SingletonMeta
 from app.ml.service.train_service import TrainService
 import atexit
@@ -19,7 +21,7 @@ class TrainScheduler(metaclass=SingletonMeta):
         logger.info("Starting up the Train Engine: ")
         self.service = service
         scheduler = BackgroundScheduler()
-        scheduler.add_job(func=service.train(), trigger="interval", seconds=3600)
+        scheduler.add_job(func=service.train, trigger="interval", seconds=15, next_run_time=datetime.now())
         # Shut down the scheduler when exiting the app
         atexit.register(lambda: scheduler.shutdown())
         scheduler.start()
