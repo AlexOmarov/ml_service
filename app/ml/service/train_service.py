@@ -1,47 +1,40 @@
 import logging
-from collections import Sequence
+from typing import Dict, Iterator, List
 
 from pyspark.rdd import RDD
-from pyspark.sql import SparkSession, GroupedData, DataFrame
-from pyspark.sql.functions import collect_set
+from pyspark.sql import SparkSession
+from sklearn.cluster import DBSCAN
 
 from app.commons.db.database_connector import DatabaseConnector
 from app.commons.singleton.singleton_meta import SingletonMeta
-from sklearn.cluster import DBSCAN
+from pandas import *
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 def calculateSimilarity(history):
-    result = {}
-    for service in history.keys():
-        for anotherService in history.keys():
-            if service != anotherService:
-                for sim in history[service]["sims"].keys():
-                    if sim == anotherService:
-                        res = history[service]["sims"][sim] - history[anotherService]["sims"][service]
-                        print(service + " " + anotherService + "=" + str(res))
-    return history
+    result = []
+    for service in history:
+        print(service)
+        print(history[service])
+        row = {}
+        x = history[service]["connected"]
+        not_x = history[service]["unconnected"]
+        for sim in history[service]["sims"]:
+            xy = history[service]["sims"][sim]
+            # Возьмем всех клиентов, у которых подключен Y и вычтем из них тех, у которых подключен еще и X
+            not_xy = history[sim]["connected"] - xy
+            distance = 0
+            if x != 0:
+                distance = xy / x
+            row[sim] = distance
+
+        #result.append(Similarity(service, row))
+    return result
 
 
-# def matrix(iterator) -> dict:
-#    result = {}
-#    row = next(iterator, "exhausted")
-#    while row != "exhausted":
-#       id_service = row[0]
-#        id_customer = row[1]
-#        if id_service in result:
-#            result[id_service] = result[id_service] + id_customer
-#        else:
-#            result[id_service] = id_customer
-#        row = next(iterator, "exhausted")
-#    res = calculateSimilarity(result)
-#    return result
-
-
-def matrix(iterator) -> dict:
-    print("MATRIX!!!")
+def matrix(iterator):
     result = {}
     row = next(iterator, "exhausted")
     # работает как индекс для итератора. Нужен для того, чтобы при добавлении новой услуги в результирующую выборку
@@ -49,7 +42,6 @@ def matrix(iterator) -> dict:
     customer_amount = 0
     while row != "exhausted":
         customer_amount += 1
-        customer = row[1]
         services = row[2]
         for service in services:
             # Проверяем, записали ли мы уже какие-то данные по этой услуге
@@ -76,7 +68,7 @@ def matrix(iterator) -> dict:
     for service in result:
         result[service]["unconnected"] = customer_amount - result[service]["connected"]
     res = calculateSimilarity(result)
-    return res
+    return iter(res)
 
 
 class TrainService(metaclass=SingletonMeta):
@@ -99,7 +91,7 @@ class TrainService(metaclass=SingletonMeta):
             .option("driver", self.db.db_properties["driver"]) \
             .load().collect()[0]["count"]
 
-        history = self.spark.read.format("jdbc").option("url", self.db.db_properties["url"]) \
+        similarities: List[Similarity] = self.spark.read.format("jdbc").option("url", self.db.db_properties["url"]) \
             .option("dbtable",
                     "(select ROW_NUMBER () OVER (ORDER BY id_customer) as num, id_customer, "
                     "array_agg(code) as services from ml_service.history inner join service "
@@ -112,15 +104,40 @@ class TrainService(metaclass=SingletonMeta):
             .option("lowerBound", self.db.db_properties["lowerBound"]) \
             .option("upperBound", upper) \
             .option("partitionColumn", "num") \
-            .load().rdd
-        distance_matrix = self.calculateMatrix(history)
-        distance_matrix.foreach(lambda p: p)
+            .load().rdd.mapPartitions(matrix).collect()
+
+        result: dict = {}
+        # Разщделять на количество агрегаций + посмотреть, точно ли агрегируется как нужно
+        for sim in similarities:
+            row: dict = sim.sims
+            if sim.name in result:
+                row = {k: result[sim.name].get(k, 0) + sim.sims.get(k, 0) for k in set(result[sim.name]) | set(sim.sims)}
+            result[sim.name] = row
+            for el in row:
+                if row[el] > 0:
+                    print(el)
+                    print(row[el])
+        print(result)
+        df = DataFrame(result).T.fillna(0)
         epsilon = 0.3
-        min_samples = 3
+        min_samples = 4
 
-        # db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit([[1, 2, 3], [1, 2, 3], [1, 2, 3]])
-        # labels = db.labels_
+        db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(df)
+        labels = db.labels_
+        print(labels.size)
+        print(labels)
 
-    def calculateMatrix(self, history: RDD):
-        # return history.flatMap(lambda row: [(w, [row[1]]) for w in row[2]]).mapPartitions(matrix)
-        return history.mapPartitions(matrix)
+
+class Similarity:
+    sims: dict
+
+    def __init__(self, name, sims: dict):
+        self.name = name
+        self.sims = sims
+
+
+
+
+        #.map(lambda x: (x.name, x.sims)).reduceByKey(
+        #    lambda x, y: (x.get(k, 0) + y.get(k, 0) for k in set(x) | set(y))
+        #)

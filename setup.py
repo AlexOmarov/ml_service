@@ -35,6 +35,8 @@ setup(
         'pyspark~=3.1.1',
         'scikit-learn~=0.24.1',
         'setuptools~=54.1.1',
+        'APScheduler~=3.7.0',
+        'pandas~=1.2.3'
     ],
     extras_require={
         'dev': [''],
