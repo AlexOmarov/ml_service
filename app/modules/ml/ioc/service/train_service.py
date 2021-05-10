@@ -5,7 +5,6 @@ from pandas import *
 from pyspark.sql import SparkSession
 from sklearn.cluster import DBSCAN
 
-from commons.ioc.ioc_container import IocContainer
 from config import Config
 
 logging.basicConfig(level=logging.INFO)
@@ -68,7 +67,7 @@ def matrix(iterator):
     return iter(res)
 
 
-class TrainService(metaclass=IocContainer):
+class TrainService:
     """A train engine"""
 
     spark: SparkSession

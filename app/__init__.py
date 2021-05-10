@@ -1,8 +1,9 @@
+from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from pyspark.sql import SparkSession
 
 import app.modules as modules
-from flask import Flask
+
 
 app = Flask(__name__)
 app.config.from_object('config.Config')
@@ -18,6 +19,6 @@ spark.sparkContext.setLogLevel("INFO")
 db = SQLAlchemy(app)
 
 
-def init():
-    modules.init()
+def get_app():
+    modules.init(app, spark, db)
     return app

@@ -1,6 +1,6 @@
 import app
 
-app = app.init()
+app = app.get_app()
 
 
 if __name__ == '__main__':

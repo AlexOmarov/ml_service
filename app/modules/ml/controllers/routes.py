@@ -1,10 +1,12 @@
 from flask import Blueprint, request
 
-from modules.ml.controllers.route_handler import recommend
+from app.modules.ml.ioc.service.route_handler import RouteHandler
+from app.modules.ml.ioc import container
 
 ml = Blueprint('ml', __name__)
 
 
 @ml.route('/recommend', methods=['POST'])
 def recommend():
-    return recommend(request)
+    handler: RouteHandler = container.get_bean(type(RouteHandler).__class__.__name__)
+    return handler.recommend(request)
