@@ -79,18 +79,18 @@ class TrainService:
         self.spark = sc
 
     def train(self):
-        
+
         upper = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
-            .option("dbtable", "(select count(DISTINCT id_customer) from ml_service.history) foo") \
+            .option("dbtable", "(select count(DISTINCT client) as count from ml_service.history) foo") \
             .option("driver", Config.DATABASE_DRIVER) \
             .load().collect()[0]["count"]
 
         similarities: List[Similarity] = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
             .option("dbtable",
-                    "(select ROW_NUMBER () OVER (ORDER BY id_customer) as num, id_customer, "
-                    "array_agg(code) as services from ml_service.history inner join service "
-                    "on service.id = history.id_service GROUP "
-                    "BY id_customer) foo") \
+                    "("
+                    "select *, rowNumberInAllBlocks() as num FROM "
+                    "(SELECT client, toString(groupUniqArray(service)) as services from history GROUP BY client)"
+                    ") foo") \
             .option("driver", Config.DATABASE_DRIVER) \
             .option("numPartitions", Config.SPARK_PARTITIONS) \
             .option("lowerBound", 0) \
@@ -104,7 +104,8 @@ class TrainService:
         for sim in similarities:
             row: dict = sim.sims
             if sim.name in result:
-                row = {k: result[sim.name].get(k, 0) + sim.sims.get(k, 0) for k in set(result[sim.name]) | set(sim.sims)}
+                row = {k: result[sim.name].get(k, 0) + sim.sims.get(k, 0) for k in
+                       set(result[sim.name]) | set(sim.sims)}
                 if sim.name in aggregation_count:
                     aggregation_count[sim.name] += 1
                 else:
@@ -117,10 +118,13 @@ class TrainService:
         epsilon = 0.04
         min_samples = 4
 
-        db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(df)
-        labels = db.labels_
-        print(labels.size)
-        print(labels)
+        if df.size < 1:
+            print("df is empty")
+        else:
+            db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(df)
+            labels = db.labels_
+            print(labels.size)
+            print(labels)
 
 
 class Similarity:
@@ -130,9 +134,6 @@ class Similarity:
         self.name = name
         self.sims = sims
 
-
-
-
-        #.map(lambda x: (x.name, x.sims)).reduceByKey(
+        # .map(lambda x: (x.name, x.sims)).reduceByKey(
         #    lambda x, y: (x.get(k, 0) + y.get(k, 0) for k in set(x) | set(y))
-        #)
+        # )

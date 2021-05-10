@@ -8,5 +8,5 @@ ml = Blueprint('ml', __name__)
 
 @ml.route('/recommend', methods=['POST'])
 def recommend():
-    handler: RouteHandler = container.get_bean(type(RouteHandler).__class__.__name__)
+    handler: RouteHandler = container.get_bean(RouteHandler.__name__)
     return handler.recommend(request)

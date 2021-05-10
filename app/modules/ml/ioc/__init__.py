@@ -13,7 +13,7 @@ def init(spark, db):
     pass
     service = TrainService(spark)
     rs = RecommendationService(spark, db)
-    container.set_bean(type(TrainService).__class__.__name__, service)
-    container.set_bean(type(RecommendationService).__class__.__name__, RecommendationService(spark, db))
-    container.set_bean(type(TrainScheduler).__class__.__name__, TrainScheduler(service))
-    container.set_bean(type(RouteHandler).__class__.__name__, RouteHandler(rs))
+    container.set_bean(TrainService.__name__, service)
+    container.set_bean(RecommendationService.__name__, RecommendationService(spark, db))
+    container.set_bean(TrainScheduler.__name__, TrainScheduler(service))
+    container.set_bean(RouteHandler.__name__, RouteHandler(rs))
