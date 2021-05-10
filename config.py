@@ -15,8 +15,10 @@ class Config(object):
     SECRET_KEY = 'YOUR_RANDOM_SECRET_KEY'
     # URI используемая для подключения к базе данных
     SQLALCHEMY_DATABASE_URI = os.environ['DATABASE_URL']
+    DATABASE_DRIVER = os.environ['DATABASE_DRIVER']
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    SPARK_PARTITIONS = os.environ['SPARK_PARTITIONS']
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
     # Define the database - we are working with

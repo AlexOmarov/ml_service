@@ -36,6 +36,7 @@ setup(
         'scikit-learn~=0.24.1',
         'setuptools~=54.1.1',
         'APScheduler~=3.7.0',
+        'Flask-SQLAlchemy~=2.5.1',
         'pandas~=1.2.3'
     ],
     extras_require={

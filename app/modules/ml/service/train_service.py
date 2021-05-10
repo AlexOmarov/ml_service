@@ -1,13 +1,12 @@
 import logging
-from typing import Dict, Iterator, List
+from typing import List
 
-from pyspark.rdd import RDD
+from pandas import *
 from pyspark.sql import SparkSession
 from sklearn.cluster import DBSCAN
 
-from app.commons.db.database_connector import DatabaseConnector
-from app.commons.singleton.singleton_meta import SingletonMeta
-from pandas import *
+from commons.ioc.ioc_container import IocContainer
+from config import Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -69,11 +68,10 @@ def matrix(iterator):
     return iter(res)
 
 
-class TrainService(metaclass=SingletonMeta):
+class TrainService(metaclass=IocContainer):
     """A train engine"""
 
     spark: SparkSession
-    db: DatabaseConnector = DatabaseConnector()
 
     def __init__(self, sc):
         """Init train engine"""
@@ -82,24 +80,21 @@ class TrainService(metaclass=SingletonMeta):
         self.spark = sc
 
     def train(self):
-        upper = self.spark.read.format("jdbc").option("url", self.db.db_properties["url"]) \
+        
+        upper = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
             .option("dbtable", "(select count(DISTINCT id_customer) from ml_service.history) foo") \
-            .option("user", self.db.db_properties["username"]) \
-            .option("password", self.db.db_properties["password"]) \
-            .option("driver", self.db.db_properties["driver"]) \
+            .option("driver", Config.DATABASE_DRIVER) \
             .load().collect()[0]["count"]
 
-        similarities: List[Similarity] = self.spark.read.format("jdbc").option("url", self.db.db_properties["url"]) \
+        similarities: List[Similarity] = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
             .option("dbtable",
                     "(select ROW_NUMBER () OVER (ORDER BY id_customer) as num, id_customer, "
                     "array_agg(code) as services from ml_service.history inner join service "
                     "on service.id = history.id_service GROUP "
                     "BY id_customer) foo") \
-            .option("user", self.db.db_properties["username"]) \
-            .option("password", self.db.db_properties["password"]) \
-            .option("driver", self.db.db_properties["driver"]) \
-            .option("numPartitions", self.db.db_properties["partitions"]) \
-            .option("lowerBound", self.db.db_properties["lowerBound"]) \
+            .option("driver", Config.DATABASE_DRIVER) \
+            .option("numPartitions", Config.SPARK_PARTITIONS) \
+            .option("lowerBound", 0) \
             .option("upperBound", upper) \
             .option("partitionColumn", "num") \
             .load().rdd.mapPartitions(matrix).collect()
