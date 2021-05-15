@@ -11,6 +11,73 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+class Similarity:
+    sims: dict
+
+    def __init__(self, name, sims: dict):
+        self.name = name
+        self.sims = sims
+
+
+class TrainService:
+    spark: SparkSession
+
+    def __init__(self, sc):
+        self.spark = sc
+
+    def train(self):
+        similarities: List[Similarity] = self.getData()
+
+        result: dict = {}
+        aggregation_count = {}
+        # Разделять на количество агрегаций + посмотреть, точно ли агрегируется как нужно
+        for sim in similarities:
+            row: dict = sim.sims
+            if sim.name in result:
+                row = {k: result[sim.name].get(k, 0) + sim.sims.get(k, 0) for k in
+                       set(result[sim.name]) | set(sim.sims)}
+                if sim.name in aggregation_count:
+                    aggregation_count[sim.name] += 1
+                else:
+                    aggregation_count[sim.name] = 1
+            result[sim.name] = row
+        for service in aggregation_count:
+            for sim in result[service]:
+                result[service][sim] = result[service][sim] / aggregation_count[service]
+        df = DataFrame(result).T.fillna(0)
+        epsilon = 0.04
+        min_samples = 4
+
+        if df.size < 1:
+            print("df is empty")
+        else:
+            db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(df)
+            labels = db.labels_
+            # TODO: Store trained model
+
+            print(labels.size)
+            print(labels)
+
+    def getData(self) -> List[Similarity]:
+        upper = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
+            .option("dbtable", "(select count(DISTINCT client) as count from ml_service.history) foo") \
+            .option("driver", Config.DATABASE_DRIVER) \
+            .load().collect()[0]["count"]
+
+        return self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
+            .option("dbtable",
+                    "("
+                    "select *, rowNumberInAllBlocks() as num FROM "
+                    "(SELECT client, toString(groupUniqArray(service)) as services from history GROUP BY client)"
+                    ") foo") \
+            .option("driver", Config.DATABASE_DRIVER) \
+            .option("numPartitions", Config.SPARK_PARTITIONS) \
+            .option("lowerBound", 0) \
+            .option("upperBound", upper) \
+            .option("partitionColumn", "num") \
+            .load().rdd.mapPartitions(matrix).collect()
+
+
 def calculateSimilarity(history):
     result = []
     for service in history:
@@ -65,75 +132,3 @@ def matrix(iterator):
         result[service]["unconnected"] = customer_amount - result[service]["connected"]
     res = calculateSimilarity(result)
     return iter(res)
-
-
-class TrainService:
-    """A train engine"""
-
-    spark: SparkSession
-
-    def __init__(self, sc):
-        """Init train engine"""
-
-        logger.info("Starting up the Train Engine...")
-        self.spark = sc
-
-    def train(self):
-
-        upper = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
-            .option("dbtable", "(select count(DISTINCT client) as count from ml_service.history) foo") \
-            .option("driver", Config.DATABASE_DRIVER) \
-            .load().collect()[0]["count"]
-
-        similarities: List[Similarity] = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
-            .option("dbtable",
-                    "("
-                    "select *, rowNumberInAllBlocks() as num FROM "
-                    "(SELECT client, toString(groupUniqArray(service)) as services from history GROUP BY client)"
-                    ") foo") \
-            .option("driver", Config.DATABASE_DRIVER) \
-            .option("numPartitions", Config.SPARK_PARTITIONS) \
-            .option("lowerBound", 0) \
-            .option("upperBound", upper) \
-            .option("partitionColumn", "num") \
-            .load().rdd.mapPartitions(matrix).collect()
-
-        result: dict = {}
-        aggregation_count = {}
-        # Разделять на количество агрегаций + посмотреть, точно ли агрегируется как нужно
-        for sim in similarities:
-            row: dict = sim.sims
-            if sim.name in result:
-                row = {k: result[sim.name].get(k, 0) + sim.sims.get(k, 0) for k in
-                       set(result[sim.name]) | set(sim.sims)}
-                if sim.name in aggregation_count:
-                    aggregation_count[sim.name] += 1
-                else:
-                    aggregation_count[sim.name] = 1
-            result[sim.name] = row
-        for service in aggregation_count:
-            for sim in result[service]:
-                result[service][sim] = result[service][sim] / aggregation_count[service]
-        df = DataFrame(result).T.fillna(0)
-        epsilon = 0.04
-        min_samples = 4
-
-        if df.size < 1:
-            print("df is empty")
-        else:
-            db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(df)
-            labels = db.labels_
-            print(labels.size)
-            print(labels)
-
-
-class Similarity:
-    sims: dict
-
-    def __init__(self, name, sims: dict):
-        self.name = name
-        self.sims = sims
-
-        # .map(lambda x: (x.name, x.sims)).reduceByKey(
-        #    lambda x, y: (x.get(k, 0) + y.get(k, 0) for k in set(x) | set(y))
-        # )

@@ -1,4 +1,3 @@
-# Import spark
 import logging
 from typing import List
 
@@ -13,7 +12,6 @@ class Recommendation:
     service: str
     rate: float
 
-    # parameterized constructor
     def __init__(self, service, rate):
         self.service = service
         self.rate = rate
@@ -26,21 +24,18 @@ class Recommendation:
 
 
 class RecommendationService:
-    """A recommendation engine"""
-
     spark: SparkSession
     db: SQLAlchemy
 
     def __init__(self, sc, db):
-        """Init the recommendation engine given a Spark context and a dataset path
-        """
-
-        logger.info("Starting up the Recommendation Engine: ")
         self.spark = sc
         self.db = db
 
     def recommend(self, user_id: int) -> List[Recommendation]:
         self.spark.sparkContext.parallelize([user_id, user_id, user_id, user_id, user_id]).collect()
+        # TODO: Make recommendation based on db stored model
+
+
         result = [Recommendation(service="", rate=0.001), Recommendation(service="", rate=0.001),
                   Recommendation(service="", rate=0.001)]
         return result
