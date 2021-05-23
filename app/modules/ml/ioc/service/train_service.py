@@ -105,7 +105,7 @@ def matrix(iterator):
     customer_amount = 0
     while row != "exhausted":
         customer_amount += 1
-        services = row[2]
+        services = row[1].replace('\'', '').replace('[', '').replace(']', '').split(',')
         for service in services:
             # Проверяем, записали ли мы уже какие-то данные по этой услуге
             if service in result:
