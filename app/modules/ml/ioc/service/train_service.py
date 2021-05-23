@@ -68,7 +68,7 @@ class TrainService:
             .option("dbtable",
                     "("
                     "select *, rowNumberInAllBlocks() as num FROM "
-                    "(SELECT client, toString(groupUniqArray(service)) as services from history GROUP BY client)"
+                    "(SELECT toString(client) as client, toString(groupUniqArray(service)) as services from history GROUP BY client)"
                     ") foo") \
             .option("driver", Config.DATABASE_DRIVER) \
             .option("numPartitions", Config.SPARK_PARTITIONS) \

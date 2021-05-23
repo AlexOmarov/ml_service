@@ -1,4 +1,4 @@
-from commons.ioc.ioc_container import IocContainer
+from app.commons.ioc.ioc_container import IocContainer
 
 from app.modules.ml.ioc.service.train_service import TrainService
 from app.modules.ml.ioc.scheduler.train_scheduler import TrainScheduler
@@ -10,7 +10,6 @@ container = IocContainer()
 
 
 def init(spark, db):
-    pass
     service = TrainService(spark)
     rs = RecommendationService(spark, db)
     container.set_bean(TrainService.__name__, service)
