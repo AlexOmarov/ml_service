@@ -12,5 +12,7 @@ def init(spark, db):
     rs = RecommendationService(spark, db)
     container.set_bean(TrainService.__name__, service)
     container.set_bean(RecommendationService.__name__, RecommendationService(spark, db))
-    container.set_bean(TrainScheduler.__name__, TrainScheduler(service))
+    scheduler = TrainScheduler(service)
+    container.set_bean(TrainScheduler.__name__, scheduler)
+    scheduler.start()
     container.set_bean(RouteHandler.__name__, RouteHandler(rs))

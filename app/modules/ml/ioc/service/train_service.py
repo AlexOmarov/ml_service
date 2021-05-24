@@ -45,12 +45,13 @@ class TrainService:
             for sim in result[service]:
                 result[service][sim] = result[service][sim] / aggregation_count[service]
         df = DataFrame(result).T.fillna(0)
-        epsilon = 0.04
+        epsilon = 0.09
         min_samples = 4
 
         if df.size < 1:
             print("df is empty")
         else:
+            print(df)
             db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(df)
             labels = db.labels_
             # TODO: Store trained model
