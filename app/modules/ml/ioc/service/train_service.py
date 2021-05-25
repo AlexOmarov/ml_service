@@ -1,22 +1,53 @@
 import logging
+import math
 from typing import List
 
-from pandas import *
 from pyspark.sql import SparkSession
 from sklearn.cluster import DBSCAN
 
 from config import Config
+from modules.ml.ioc.entity.client_vector import ClientVector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+epsilon = 0.09
+min_samples = 4
 
-class Similarity:
-    sims: dict
 
-    def __init__(self, name, sims: dict):
-        self.name = name
-        self.sims = sims
+def calculate_euclidian(vector, other_vector):
+    return math.sqrt(sum((vector.get(d, 0) - other_vector.get(d, 0)) ** 2 for d in set(vector) | set(other_vector)))
+
+
+def vectors(iterator, services) -> List[ClientVector]:
+    result: list = []
+    row = next(iterator, "exhausted")
+
+    # Проверяем каждую услугу на вхождение в услуги клиента и строим результат -
+    # [client1: [service1: 1, service2: 0], client2: [service1: 0, service2: 1]]
+    while row != "exhausted":
+        vector = {}
+        for service in services:
+            client_services = row[1].replace('\'', '').replace('[', '').replace(']', '').split(',')
+            vector[service[0]] = 1 if client_services.__contains__(service[0]) else 0
+        result.append(ClientVector(row[0], vector))
+        row = next(iterator, "exhausted")
+    # TODO: Делать матрицу здесь, потом мерджить ее с остальными партициями
+    return iter(result)
+
+
+def get_conjugation(client_vectors):
+    result = {}
+    # O(n^2), можно оптимизировать - заполнять только половину матрицы и реверсировать ее
+    # В итоге должна получиться матрица всех клиентов со всеми
+    for client_vector in client_vectors:
+        vector = {}
+
+        for other_client_vector in client_vectors:
+            vector[other_client_vector.id] = calculate_euclidian(client_vector.vector, other_client_vector.vector)
+        vector = sorted(vector.items(), key=lambda item: item[0])
+        result[client_vector.id] = vector
+    return result
 
 
 class TrainService:
@@ -26,40 +57,25 @@ class TrainService:
         self.spark = sc
 
     def train(self):
-        similarities: List[Similarity] = self.getData()
-
-        result: dict = {}
-        aggregation_count = {}
-        # Разделять на количество агрегаций + посмотреть, точно ли агрегируется как нужно
-        for sim in similarities:
-            row: dict = sim.sims
-            if sim.name in result:
-                row = {k: result[sim.name].get(k, 0) + sim.sims.get(k, 0) for k in
-                       set(result[sim.name]) | set(sim.sims)}
-                if sim.name in aggregation_count:
-                    aggregation_count[sim.name] += 1
-                else:
-                    aggregation_count[sim.name] = 1
-            result[sim.name] = row
-        for service in aggregation_count:
-            for sim in result[service]:
-                result[service][sim] = result[service][sim] / aggregation_count[service]
-        df = DataFrame(result).T.fillna(0)
-        epsilon = 0.09
-        min_samples = 3
-
-        if df.size < 1:
+        # [client1: [service1: 1, service2: 0], client2: [service1: 0, service2: 1]]
+        client_vectors: List = self.getData()
+        conjugation_matrix = get_conjugation(client_vectors)
+        if len(conjugation_matrix) < 1:
             print("df is empty")
         else:
-            print(df)
-            db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(df)
+            print(conjugation_matrix)
+            db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(conjugation_matrix)
             labels = db.labels_
             # TODO: Store trained model
-
             print(labels.size)
             print(labels)
 
-    def getData(self) -> List[Similarity]:
+    def getData(self) -> List:
+        # Получаем все услуги
+        services = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
+            .option("dbtable", "(select toString(id) as service from ml_service.service) foo") \
+            .option("driver", Config.DATABASE_DRIVER) \
+            .load().collect()
         upper = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
             .option("dbtable", "(select count(DISTINCT client) as count from ml_service.history) foo") \
             .option("driver", Config.DATABASE_DRIVER) \
@@ -76,60 +92,4 @@ class TrainService:
             .option("lowerBound", 0) \
             .option("upperBound", upper) \
             .option("partitionColumn", "num") \
-            .load().rdd.mapPartitions(matrix).collect()
-
-
-def calculateSimilarity(history):
-    result = []
-    for service in history:
-        row = {}
-        x = history[service]["connected"]
-        not_x = history[service]["unconnected"]
-        for sim in history[service]["sims"]:
-            xy = history[service]["sims"][sim]
-            # Возьмем всех клиентов, у которых подключен Y и вычтем из них тех, у которых подключен еще и X
-            not_xy = history[sim]["connected"] - xy
-            distance = 0
-            if x != 0:
-                distance = xy / x
-            row[sim] = distance
-
-        result.append(Similarity(service, row))
-    return result
-
-
-def matrix(iterator):
-    result = {}
-    row = next(iterator, "exhausted")
-    # работает как индекс для итератора. Нужен для того, чтобы при добавлении новой услуги в результирующую выборку
-    # на середине прохода мы могли понять, сколько клиентов до этого эту услугу не имеет
-    customer_amount = 0
-    while row != "exhausted":
-        customer_amount += 1
-        services = row[1].replace('\'', '').replace('[', '').replace(']', '').split(',')
-        for service in services:
-            # Проверяем, записали ли мы уже какие-то данные по этой услуге
-            if service in result:
-                row = result[service]
-                row["connected"] += 1
-                # Берем словарь с данными о похожих услугах
-                sims = row["sims"]
-                for anotherService in services:
-                    if anotherService != service:
-                        if anotherService in sims:
-                            sims[anotherService] += 1
-                        else:
-                            sims[anotherService] = 1
-            # Если такой услуги еще нет, делаем для нее запись
-            else:
-                row = {"unconnected": 0, "connected": 1, "sims": {}}
-                for anotherService in services:
-                    if anotherService != service:
-                        row["sims"][anotherService] = 1
-                result[service] = row
-
-        row = next(iterator, "exhausted")
-    for service in result:
-        result[service]["unconnected"] = customer_amount - result[service]["connected"]
-    res = calculateSimilarity(result)
-    return iter(res)
+            .load().rdd.mapPartitions(lambda iterator: vectors(iterator, services)).collect()
