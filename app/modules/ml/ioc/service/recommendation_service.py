@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import List, Dict
 from uuid import UUID
 
 from flask_sqlalchemy import SQLAlchemy
@@ -26,6 +26,23 @@ class Recommendation:
         }
 
 
+def longTerm(service_vectors, client_vector) -> Dict[Recommendation]:
+    print("Performing long term recommendation")
+    print(client_vector)
+    print(service_vectors)
+    result = {}
+    return result
+
+
+def shortTerm(service_vectors, client_vector, markov) -> Dict[Recommendation]:
+    print("Performing short term recommendation")
+    print(client_vector)
+    print(service_vectors)
+    print(markov)
+    result = {}
+    return result
+
+
 class RecommendationService:
     spark: SparkSession
     db: SQLAlchemy
@@ -35,16 +52,30 @@ class RecommendationService:
         self.db = db
 
     def recommend(self, user_id: UUID) -> List[Recommendation]:
-        self.spark.sparkContext.parallelize([user_id, user_id, user_id, user_id, user_id]).collect()
 
-        result = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
+        service_vectors = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
             .option("dbtable",
                     "("
-                    "select *, rowNumberInAllBlocks() as num FROM "
-                    "(SELECT toString(id) as id, toString(service) as service from history WHERE client  = '" + user_id.__str__() + "')"
-                                                                                                                          ") foo") \
+                    "WITH (SELECT max(version) FROM service_vector) AS max_version"
+                    "SELECT toString(service) as service, toString(clusters) as vector, version from service_vector WHERE version = max_version"
+                    ") foo") \
             .option("driver", Config.DATABASE_DRIVER).load().collect()
-        res = []
-        for row in result:
-            res.append(Recommendation(service=row[1], rate=0.001))
-        return res
+
+        client_vector = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
+            .option("dbtable", "("
+                               "WITH (SELECT max(version) FROM client_vector) AS max_version"
+                               "(SELECT toString(client) as client, toString(clusters) as vector, version from client_vector WHERE client  = '"
+                    + user_id.__str__() + " AND version = max_version) foo").option("driver",
+                                                                                    Config.DATABASE_DRIVER).load().collect()
+
+        markov = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
+            .option("dbtable", "("
+                               "WITH (SELECT max(version) FROM markov) AS max_version"
+                               "(SELECT toString(cluster) as cluster, toString(value) as vector, version from client_vector WHERE client  = '"
+                    + user_id.__str__() + " AND version = max_version) foo").option("driver",
+                                                                                    Config.DATABASE_DRIVER).load().collect()
+
+        return sorted(
+            {**longTerm(service_vectors, client_vector), **shortTerm(service_vectors, client_vector, markov)}.items(),
+            key=lambda item: item.rate
+        )[:10]

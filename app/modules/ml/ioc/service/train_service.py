@@ -46,7 +46,7 @@ class TrainService:
                 result[service][sim] = result[service][sim] / aggregation_count[service]
         df = DataFrame(result).T.fillna(0)
         epsilon = 0.09
-        min_samples = 4
+        min_samples = 3
 
         if df.size < 1:
             print("df is empty")
