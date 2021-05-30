@@ -12,8 +12,8 @@ from modules.ml.ioc.entity.client_vector import ClientVector
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-epsilon = 0.09
-min_samples = 4
+epsilon = 27.5
+min_samples = 3
 
 
 def calculate_euclidian(vector, other_vector):
@@ -62,43 +62,47 @@ class TrainService:
             print(labels)
 
     def getData(self) -> List:
-        # Получаем все услуги
-        services = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
-            .option("dbtable", "(select toString(id) as service from ml_service.service) foo") \
-            .option("driver", Config.DATABASE_DRIVER) \
-            .load().collect()
-        upper = self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
-            .option("dbtable", "(select count(DISTINCT client) as count from ml_service.history) foo") \
-            .option("driver", Config.DATABASE_DRIVER) \
-            .load().collect()[0]["count"]
-
         return self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
             .option("dbtable",
                     "("
-                    "SELECT toString(clients_first.client) as client,  toString(clients_second.client) as satelite, "
-                    "sqrt(length(arrayConcat(clients_first.services, clients_second.services)) "
-                    "- length(clients_first.services) "
-                    "+ length(arrayConcat(clients_first.services, clients_second.services)) "
-                    "- length(clients_first.services)) AS euclidian "
-                    "FROM "
-                    "(SELECT client, groupUniqArray(service) as services, 1 as equalityWorkaround FROM "
-                    "(SELECT client, service, max(updateTime) as endTime from history where updateType = \'END\' group by client, service) end "
+                    "select  toString(firstServices.id)                     as service, "
+                    "toString(secondServices.id)                    as satelite, "
+                    "sqrt(length(arrayConcat(firstServices.clients, secondServices.clients)) "
+                    "- length(firstServices.clients) "
+                    " + length(arrayConcat(firstServices.clients, secondServices.clients)) - "
+                    "length(firstServices.clients)) AS euclidian from "
+                    "(select id, ids as clients, 1 as equalityWorkaround from "
+                    "(SELECT  groupUniqArray(start.client) as ids, start.service as service "
+                    "FROM (SELECT client, service, max(updateTime) as endTime "
+                    "from history "
+                    "where updateType = \'END\' "
+                    "group by client, service) end "
+                    "right join (SELECT client, service, max(updateTime) as startTime "
+                    " from history "
+                    " where updateType = \'START\' "
+                    " group by client, service) start "
+                    "   on end.service = start.service and end.client = start.client "
+                    "where startTime >= endTime "
+                    "   OR isNull(endTime) == 1 "
+                    "GROUP BY service) enabledServices right outer join service on id = service) firstServices "
+
                     "inner join "
-                    "(SELECT client, service, max(updateTime) as startTime from history where updateType = \'START\' group by client, service) start "
-                    "on end.service = start.service and end.client = start.client where startTime >= endTime GROUP BY client) "
-                    "clients_first "
 
-
-                    " inner join "
-
-                    "(SELECT client, groupUniqArray(service) as services, 1 as equalityWorkaround FROM "
-                    "(SELECT client, service, max(updateTime) as endTime from history where updateType = \'END\' group by client, service) end "
-                    "inner join "
-                    "(SELECT client, service, max(updateTime) as startTime from history where updateType = \'START\' group by client, service) start "
-                    "on end.service = start.service and end.client = start.client where startTime >= endTime GROUP BY client) "
-                    "clients_second "
-
-                    "on equals(clients_first.equalityWorkaround, clients_second.equalityWorkaround) "
+                    "(select id, ids as clients, 1 as equalityWorkaround from "
+                    "(SELECT  groupUniqArray(start.client) as ids, start.service as service "
+                    "FROM (SELECT client, service, max(updateTime) as endTime "
+                    "from history "
+                    " where updateType = \'END\' "
+                    "group by client, service) end "
+                    "right join (SELECT client, service, max(updateTime) as startTime "
+                    "from history "
+                    " where updateType = \'START\' "
+                    " group by client, service) start "
+                    "on end.service = start.service and end.client = start.client "
+                    "where startTime >= endTime "
+                    "   OR isNull(endTime) == 1 "
+                    "GROUP BY service) enabledServices right outer join service on id = service) secondServices "
+                    "on equals(firstServices.equalityWorkaround, secondServices.equalityWorkaround) "
                     ") foo") \
             .option("driver", Config.DATABASE_DRIVER) \
             .load().rdd.mapPartitions(lambda iterator: vectors(iterator)).collect()
