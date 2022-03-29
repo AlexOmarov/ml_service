@@ -26,7 +26,7 @@ setup(
     keywords='Flask Flask-Assets Machine-learning Tensorflow',
     packages=find_packages(),
     install_requires=[
-        'Flask~=1.1.2',
+        'Flask~=2.1.0',
         'Waitress~=1.4.3',
         'TensorFlow~=2.4.1',
         'Matplotlib~=3.2.1',
@@ -38,6 +38,7 @@ setup(
         'APScheduler~=3.7.0',
         'Flask-SQLAlchemy~=2.5.1',
         'pandas~=1.2.3',
+        'MarkupSafe~=2.1.1',
         'scipy~=1.4.1'
     ],
     extras_require={
