@@ -7,7 +7,6 @@ from pyspark.sql import SparkSession
 from sklearn.cluster import DBSCAN
 
 from config import Config
-from modules.ml.ioc.entity.client_vector import ClientVector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
