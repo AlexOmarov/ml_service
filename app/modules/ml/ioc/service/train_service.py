@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 epsilon = 27.5
-min_samples = 5
+min_samples = 3
 
 
 def calculate_euclidian(vector, other_vector):
@@ -36,7 +36,7 @@ def vectors(iterator):
         res[row[0]] = vector
         row = next(iterator, "exhausted")
     result = np.array([[res[client][satelite] for satelite in sorted(res[client])] for client in sorted(res)])
-    response = [res]
+    response = [result]
     return iter(response)
 
 
@@ -49,19 +49,17 @@ class TrainService:
     def train(self):
         # [client1: [service1: 1, service2: 0], client2: [service1: 0, service2: 1]]
         client_vectors: List = self.getData()
+        print("client_vectors")
+        print(client_vectors)
+        print(client_vectors[0])
         if len(client_vectors) < 1:
             print("df is empty")
         else:
-            db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(np.array([[client_vectors[0][client][satelite] for satelite in sorted(client_vectors[0][client])] for client in sorted(client_vectors[0])]))
+            db = DBSCAN(eps=epsilon, min_samples=min_samples, metric="precomputed").fit(client_vectors[0])
             labels = db.labels_
-            index = 0
-            services = {}
-            for k in client_vectors[0]:
-                services[k] = labels[index]
-                index = index + 1
-            print(services)
-
-
+            # TODO: Store trained model
+            print(labels.size)
+            print(labels)
 
     def getData(self) -> List:
         return self.spark.read.format("jdbc").option("url", Config.SQLALCHEMY_DATABASE_URI) \
