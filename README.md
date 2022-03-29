@@ -2,7 +2,7 @@
 Microservice which is responsible for machine learning processing.  
 Is included in a backend system architecture.
 Uses Flask, Spark, Clickhouse as a data storage.  
-Python v 3.6 is used. JDK 8 should be configured as JAVA_HOME
+Python v 3.9 is used. JDK 8 should be configured as JAVA_HOME
 Service chooses elements for recommendation based on previous user activity. Uses markov chain algorithm as a base
 
 Use dockerfile to launch service. Bind ports - `5000:5000`.
